@@ -1,0 +1,25 @@
+[dotenv@17.3.1] injecting env (8) from .env -- tip: ΓÜÖ∩╕Å  override existing env vars with { override: true }
+Connected to PostgreSQL database
+Using SKU: d92a6801-e82a-439e-8f89-d58e6b55c4dd
+Simulation failed: error: there is no unique or exclusion constraint matching the ON CONFLICT specification
+    at D:\wellforged - 2\Backend\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async simulateAddToCart (D:\wellforged - 2\Backend\src\simulate_cart.ts:17:28) {
+  length: 148,
+  severity: 'ERROR',
+  code: '42P10',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'plancat.c',
+  line: '943',
+  routine: 'infer_arbiter_indexes'
+}

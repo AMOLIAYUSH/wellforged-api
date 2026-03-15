@@ -1,0 +1,12 @@
+--- Products ---
+0464102e-15b5-48bf-bbe4-0ff1bcdcb80e: Moringa Leaf Powder
+ea98eb8e-1f22-4d57-9ba1-7fb1eb8a5ab7: Ashwagandha Root Powder
+a00c9cdb-9f97-4d04-b855-982f24fff178: Spirulina Tablets
+c43be4a9-0174-4b01-aa7c-fc8cc011ab72: Moringa Leaf Powder - 250g
+d17304a7-739b-40a1-b822-7e619fbfb6bd: Moringa Leaf Powder - 100g
+
+--- Product Images ---
+0464102e-15b5-48bf-bbe4-0ff1bcdcb80e [true]: https://images.unsplash.com/photo-1546483875-ad9014c88eba?auto=format&fit=crop&q=80&w=800
+0464102e-15b5-48bf-bbe4-0ff1bcdcb80e [false]: https://images.unsplash.com/photo-1515205737777-596cc6a2c208?auto=format&fit=crop&q=80&w=800
+ea98eb8e-1f22-4d57-9ba1-7fb1eb8a5ab7 [true]: https://images.unsplash.com/photo-1615485500704-8e990f3900f7?auto=format&fit=crop&q=80&w=800
+a00c9cdb-9f97-4d04-b855-982f24fff178 [true]: https://images.unsplash.com/photo-1611080541599-8c6dbde6ed28?auto=format&fit=crop&q=80&w=800

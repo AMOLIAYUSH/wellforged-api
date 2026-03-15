@@ -1,0 +1,57 @@
+
+Listing columns for 'products'...
+
+Checking columns for 'orders'...
+Column: id (uuid)
+Column: profile_id (uuid)
+Column: order_number (text)
+Column: total_amount (integer)
+Column: discount_amount (integer)
+Column: coupon_id (uuid)
+Column: current_status (text)
+Column: shipping_address_id (uuid)
+Column: created_at (timestamp with time zone)
+Column: updated_at (timestamp with time zone)
+
+Checking columns for 'order_items'...
+Column: id (uuid)
+Column: order_id (uuid)
+Column: sku_id (uuid)
+Column: quantity (integer)
+Column: unit_price (integer)
+Column: created_at (timestamp with time zone)
+
+Checking columns for 'addresses'...
+Column: id (uuid)
+Column: profile_id (uuid)
+Column: full_name (text)
+Column: phone (text)
+Column: address_line1 (text)
+Column: address_line2 (text)
+Column: city (text)
+Column: state (text)
+Column: pincode (text)
+Column: is_default (boolean)
+Column: created_at (timestamp with time zone)
+
+Checking columns for 'profiles'...
+Column: id (uuid)
+Column: full_name (text)
+Column: phone (text)
+Column: loyalty_points (integer)
+Column: created_at (timestamp with time zone)
+Column: updated_at (timestamp with time zone)
+
+Checking columns for 'cart_items'...
+Column: id (uuid)
+Column: profile_id (uuid)
+Column: sku_id (uuid)
+Column: quantity (integer)
+Column: created_at (timestamp with time zone)
+
+Listing SKUs...
+SKU: 100g | ProductID: c0a80121-7ac0-4e55-9b22-8d7764d1f2e1 | Price: 34900 | Stock: 50
+SKU: 250g | ProductID: c0a80121-7ac0-4e55-9b22-8d7764d1f2e1 | Price: 54900 | Stock: 100
+
+Checking constraints for 'profiles' using pg_constraint...
+No foreign keys found for 'profiles'.
