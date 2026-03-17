@@ -1,5 +1,3 @@
--- Replace active coupons with the fixed threshold-based WellForged coupon set
-
 UPDATE coupons
 SET is_active = false
 WHERE is_active = true;
@@ -27,8 +25,3 @@ SET
     max_uses = EXCLUDED.max_uses,
     used_count = 0,
     is_active = true;
-
-SELECT code, discount_value, min_order_value, is_active
-FROM coupons
-WHERE is_active = true
-ORDER BY min_order_value ASC;

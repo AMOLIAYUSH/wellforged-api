@@ -27,6 +27,7 @@ export const createOrderSchema = z.object({
         guest_details: z.object({
             full_name: z.string().min(1),
             mobile_number: z.string().min(10),
+            email: z.string().email('Invalid email address').optional(),
             address_line1: z.string().min(1),
             city: z.string().min(1),
             state: z.string().min(1),

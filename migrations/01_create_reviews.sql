@@ -2,7 +2,7 @@
 -- WellForged Dynamic Reviews Table
 -- =============================================================
 
-CREATE TABLE IF NOT EXISTS product_reviews (
+CREATE TABLE IF NOT EXISTS   (
     id          SERIAL PRIMARY KEY,
     product_id  INT REFERENCES products(id) ON DELETE CASCADE,
     profile_id  INT REFERENCES profiles(id) ON DELETE SET NULL,

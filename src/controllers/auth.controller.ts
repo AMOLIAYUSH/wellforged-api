@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
 
@@ -20,8 +19,8 @@ export const signup = async (req: Request, res: Response) => {
         const full_name = `${first_name} ${last_name}`.trim();
 
         const newUser = await pool.query(
-            'INSERT INTO profiles (full_name, first_name, last_name, phone) VALUES ($1, $2, $3, $4) RETURNING id, full_name, phone',
-            [full_name, first_name, last_name, mobile_number]
+            'INSERT INTO profiles (full_name, email, phone, role) VALUES ($1, $2, $3, $4) RETURNING id, full_name, email, phone, role',
+            [full_name, email?.trim().toLowerCase() || null, mobile_number, 'customer']
         );
 
         const user = newUser.rows[0];
@@ -35,7 +34,17 @@ export const signup = async (req: Request, res: Response) => {
             { expiresIn: (process.env.JWT_EXPIRES_IN as any) || '7d' }
         );
 
-        res.status(201).json({ token, user: { ...user, first_name, last_name, mobile_number: user.phone, role: 'customer' } });
+        res.status(201).json({
+            token,
+            user: {
+                ...user,
+                first_name,
+                last_name,
+                email: user.email || '',
+                mobile_number: user.phone,
+                role: user.role || 'customer',
+            }
+        });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
@@ -109,7 +118,7 @@ export const checkPhone = async (req: Request, res: Response) => {
 export const getProfile = async (req: any, res: Response) => {
     try {
         const userResult = await pool.query(
-            'SELECT id, full_name, phone, created_at FROM profiles WHERE id = $1',
+            'SELECT id, full_name, email, phone, role, created_at FROM profiles WHERE id = $1',
             [req.user.id]
         );
 
@@ -125,7 +134,9 @@ export const getProfile = async (req: any, res: Response) => {
             ...user,
             first_name,
             last_name,
-            mobile_number: user.phone
+            email: user.email || '',
+            mobile_number: user.phone,
+            role: user.role || 'customer',
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message });

@@ -2,6 +2,15 @@ import type { Response } from 'express';
 import pool from '../config/db.js';
 import MailerService from '../services/mailer.service.js';
 
+const getSnapshotField = (snapshot: unknown, field: string): string | null => {
+    if (!snapshot || typeof snapshot !== 'object') {
+        return null;
+    }
+
+    const value = (snapshot as Record<string, unknown>)[field];
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+};
+
 export const createOrder = async (req: any, res: Response) => {
     const { address_id, coupon_id, idempotency_key, guest_details, items: guest_items } = req.body;
     const client = await pool.connect();
@@ -11,8 +20,9 @@ export const createOrder = async (req: any, res: Response) => {
 
         let profileId = null;
         let finalAddressSnapshot = null;
-        let finalAddressId = null;
         let itemsToProcess = [];
+        let normalizedPhone: string | null = null;
+        let normalizedEmail: string | null = null;
 
         // Guest Checkout Path (Default in Ephemeral Model)
         if (!req.user || guest_details) {
@@ -22,25 +32,37 @@ export const createOrder = async (req: any, res: Response) => {
             finalAddressSnapshot = guest_details;
 
             // 1.0 PERSIST GUEST PROFILE
-            // Try to find if a profile exists for this phone; if not create it
-            const profileLookup = await client.query(
-                'SELECT id FROM profiles WHERE phone = $1',
-                [guest_details.mobile_number]
+            // Reuse an existing profile by phone first, then by email if one exists.
+            normalizedPhone = guest_details.mobile_number?.trim() || null;
+            normalizedEmail = guest_details.email?.trim().toLowerCase() || null;
+
+            let profileLookup = await client.query(
+                'SELECT id, phone, email FROM profiles WHERE phone = $1',
+                [normalizedPhone]
             );
+
+            if (profileLookup.rows.length === 0 && normalizedEmail) {
+                profileLookup = await client.query(
+                    'SELECT id, phone, email FROM profiles WHERE LOWER(email) = $1',
+                    [normalizedEmail]
+                );
+            }
 
             if (profileLookup.rows.length > 0) {
                 profileId = profileLookup.rows[0].id;
-                // Optional: Update email if provided and not set
-                if (guest_details.email) {
-                    await client.query(
-                        'UPDATE profiles SET email = COALESCE(email, $1), full_name = $2 WHERE id = $3',
-                        [guest_details.email, guest_details.full_name, profileId]
-                    );
-                }
+
+                const existingProfile = profileLookup.rows[0];
+                const nextEmail = existingProfile.email || normalizedEmail;
+                const nextPhone = existingProfile.phone || normalizedPhone;
+
+                await client.query(
+                    'UPDATE profiles SET email = $1, phone = $2, full_name = $3 WHERE id = $4',
+                    [nextEmail, nextPhone, guest_details.full_name, profileId]
+                );
             } else {
                 const newProfile = await client.query(
                     'INSERT INTO profiles (full_name, email, phone, role) VALUES ($1, $2, $3, $4) RETURNING id',
-                    [guest_details.full_name, guest_details.email, guest_details.mobile_number, 'customer']
+                    [guest_details.full_name, normalizedEmail, normalizedPhone, 'customer']
                 );
                 profileId = newProfile.rows[0].id;
             }
@@ -48,7 +70,11 @@ export const createOrder = async (req: any, res: Response) => {
             // Securely fetch details for the requested guest items
             for (const gItem of guest_items) {
                 const skuResult = await client.query(
-                    'SELECT price, stock FROM skus WHERE id = $1 FOR UPDATE',
+                    `SELECT s.price, s.stock, s.label, p.name AS product_name
+                     FROM skus s
+                     JOIN products p ON s.product_id = p.id
+                     WHERE s.id = $1
+                     FOR UPDATE OF s`,
                     [gItem.sku_id]
                 );
                 if (skuResult.rows.length === 0) {
@@ -58,7 +84,9 @@ export const createOrder = async (req: any, res: Response) => {
                     sku_id: gItem.sku_id,
                     quantity: gItem.quantity,
                     price: skuResult.rows[0].price,
-                    stock: skuResult.rows[0].stock
+                    stock: skuResult.rows[0].stock,
+                    label: skuResult.rows[0].label,
+                    product_name: skuResult.rows[0].product_name,
                 });
             }
         }
@@ -66,9 +94,10 @@ export const createOrder = async (req: any, res: Response) => {
         else {
             profileId = req.user.id;
             const itemsResult = await client.query(
-                `SELECT ci.*, s.price, s.stock 
+                `SELECT ci.*, s.price, s.stock, s.label, p.name AS product_name
                  FROM cart_items ci 
                  JOIN skus s ON ci.sku_id = s.id 
+                 JOIN products p ON s.product_id = p.id
                  WHERE ci.profile_id = $1 
                  FOR UPDATE OF s`,
                 [profileId]
@@ -88,14 +117,13 @@ export const createOrder = async (req: any, res: Response) => {
                 throw new Error('Address not found');
             }
             finalAddressSnapshot = addressResult.rows[0];
-            finalAddressId = address_id;
         }
 
         // 1.1 CHECK IDEMPOTENCY
         if (idempotency_key && profileId) {
             const existingOrder = await client.query(
-                'SELECT * FROM orders WHERE profile_id = $1 AND order_number LIKE $2',
-                [profileId, `%${idempotency_key}%`]
+                'SELECT * FROM orders WHERE profile_id = $1 AND idempotency_key = $2',
+                [profileId, idempotency_key]
             );
             if (existingOrder.rows.length > 0) {
                 await client.query('COMMIT');
@@ -122,17 +150,27 @@ export const createOrder = async (req: any, res: Response) => {
                 [coupon_id]
             );
 
-            if (couponResult.rows.length > 0) {
-                const coupon = couponResult.rows[0];
-                if (!coupon.min_order_value || subtotal >= coupon.min_order_value) {
-                    if (coupon.discount_type === 'percentage') {
-                        discount_amount = Math.floor((subtotal * coupon.discount_value) / 100);
-                    } else {
-                        discount_amount = coupon.discount_value;
-                    }
-                    await client.query('UPDATE coupons SET used_count = used_count + 1 WHERE id = $1', [coupon_id]);
-                }
+            if (couponResult.rows.length === 0) {
+                throw new Error('Invalid or expired coupon code');
             }
+
+            const coupon = couponResult.rows[0];
+
+            if (coupon.min_order_value && subtotal < coupon.min_order_value) {
+                throw new Error(`Minimum order amount of Rs ${coupon.min_order_value} required`);
+            }
+
+            if (coupon.max_uses && coupon.used_count >= coupon.max_uses) {
+                throw new Error('Coupon usage limit reached');
+            }
+
+            if (coupon.discount_type === 'percentage') {
+                discount_amount = Math.floor((subtotal * coupon.discount_value) / 100);
+            } else {
+                discount_amount = coupon.discount_value;
+            }
+
+            await client.query('UPDATE coupons SET used_count = used_count + 1 WHERE id = $1', [coupon_id]);
         }
 
         const total_amount = subtotal - discount_amount + shipping_amount;
@@ -140,9 +178,9 @@ export const createOrder = async (req: any, res: Response) => {
         // 3. Create local order (Auto-confirm as integrations are decommissioned)
         const order_number = `WF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const orderResult = await client.query(
-            `INSERT INTO orders (profile_id, order_number, total_amount, discount_amount, coupon_id, address_snapshot, subtotal, payment_status) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [profileId, order_number, total_amount, discount_amount, coupon_id, JSON.stringify(finalAddressSnapshot), subtotal, 'paid']
+            `INSERT INTO orders (profile_id, order_number, idempotency_key, total_amount, discount_amount, coupon_id, address_snapshot, subtotal, payment_status) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [profileId, order_number, idempotency_key || null, total_amount, discount_amount, coupon_id, JSON.stringify(finalAddressSnapshot), subtotal, 'paid']
         );
         const order = orderResult.rows[0];
 
@@ -166,6 +204,27 @@ export const createOrder = async (req: any, res: Response) => {
         }
 
         await client.query('COMMIT');
+
+        const customerEmail = normalizedEmail || getSnapshotField(finalAddressSnapshot, 'email');
+        const customerName = guest_details?.full_name || getSnapshotField(finalAddressSnapshot, 'full_name') || 'Customer';
+
+        if (customerEmail && MailerService.isConfigured()) {
+            try {
+                await MailerService.sendOrderConfirmation(
+                    customerEmail,
+                    customerName,
+                    order.order_number,
+                    Number(total_amount),
+                    itemsToProcess.map((item: any) => ({
+                        productName: item.product_name || 'WellForged Product',
+                        quantity: Number(item.quantity),
+                        variantLabel: item.label || null,
+                    }))
+                );
+            } catch (emailError) {
+                console.error('Order email send failed:', emailError);
+            }
+        }
 
         res.status(201).json(order);
     } catch (error: any) {
@@ -245,6 +304,21 @@ export const updateOrderStatus = async (req: any, res: Response) => {
         const { id } = req.params;
         const { payment_status, fulfillment_status } = req.body;
 
+        const existingOrderResult = await pool.query(
+            `SELECT o.order_number,
+                    o.address_snapshot,
+                    p.email,
+                    p.full_name
+             FROM orders o
+             LEFT JOIN profiles p ON o.profile_id = p.id
+             WHERE o.id = $1`,
+            [id]
+        );
+
+        if (existingOrderResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
         const result = await pool.query(
             `UPDATE orders 
              SET payment_status = COALESCE($1, payment_status), 
@@ -254,11 +328,26 @@ export const updateOrderStatus = async (req: any, res: Response) => {
             [payment_status, fulfillment_status, id]
         );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Order not found' });
+        const updatedOrder = result.rows[0];
+        const existingOrder = existingOrderResult.rows[0];
+        const recipientEmail = existingOrder.email || getSnapshotField(existingOrder.address_snapshot, 'email');
+        const recipientName = existingOrder.full_name || getSnapshotField(existingOrder.address_snapshot, 'full_name') || 'Customer';
+        const statusForEmail = fulfillment_status || payment_status;
+
+        if (recipientEmail && statusForEmail && MailerService.isConfigured()) {
+            try {
+                await MailerService.sendShippingUpdate(
+                    recipientEmail,
+                    recipientName,
+                    existingOrder.order_number,
+                    statusForEmail
+                );
+            } catch (emailError) {
+                console.error('Order status email send failed:', emailError);
+            }
         }
 
-        res.json(result.rows[0]);
+        res.json(updatedOrder);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }

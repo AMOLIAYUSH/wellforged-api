@@ -162,6 +162,7 @@ CREATE TABLE orders (
     id                  SERIAL PRIMARY KEY,
     order_number        VARCHAR(100) UNIQUE NOT NULL,
     profile_id          INT REFERENCES profiles(id) ON DELETE SET NULL,
+    idempotency_key     VARCHAR(255),
     address_snapshot    JSONB NOT NULL,
     coupon_id           INT REFERENCES coupons(id) ON DELETE SET NULL,
     subtotal            DECIMAL(10,2) NOT NULL,
@@ -172,6 +173,8 @@ CREATE TABLE orders (
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX idx_orders_profile_idempotency ON orders(profile_id, idempotency_key);
 
 -- =============================================================
 -- 12. ORDER ITEMS
@@ -323,7 +326,8 @@ SELECT id, test_name, test_value, unit, pass_status FROM report_batches, (VALUES
 WHERE report_batches.batch_number = 'WF2026011501';
 
 -- Demo Coupons
-INSERT INTO coupons (code, discount_type, discount_value, min_order_value, expires_at, is_active) VALUES 
-('Welcome20', 'fixed', 20.00, 300.00, '2026-12-31 23:59:59+05:30', true),
-('Welcome30', 'fixed', 30.00, 500.00, '2026-12-31 23:59:59+05:30', true),
-('Welcome50', 'fixed', 50.00, 800.00, '2026-12-31 23:59:59+05:30', true);
+INSERT INTO coupons (code, discount_type, discount_value, min_order_value, expires_at, is_active) VALUES
+('SAVE20', 'fixed', 20.00, 349.00, '2026-12-31 23:59:59+05:30', true),
+('SAVE30', 'fixed', 30.00, 549.00, '2026-12-31 23:59:59+05:30', true),
+('SAVE50', 'fixed', 50.00, 890.00, '2026-12-31 23:59:59+05:30', true),
+('SAVE100', 'fixed', 100.00, 1500.00, '2026-12-31 23:59:59+05:30', true);
