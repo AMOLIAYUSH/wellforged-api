@@ -8,6 +8,7 @@ interface EmailRecipient {
 interface OrderLineItem {
     productName: string;
     quantity: number;
+    price: number;
     variantLabel?: string | null;
 }
 
@@ -19,14 +20,14 @@ interface EmailPayload {
 }
 
 const brevoApiKey = process.env.BREVO_API_KEY;
-const brevoFromEmail = process.env.BREVO_FROM_EMAIL;
-const brevoFromName = process.env.BREVO_FROM_NAME || 'WellForged';
-const brevoReplyToEmail = process.env.BREVO_REPLY_TO_EMAIL;
+const brevoFromEmail = process.env.BREVO_FROM_EMAIL || 'hello@wellforged.in';
+const brevoFromName = process.env.BREVO_FROM_NAME || 'Wellforged';
+const brevoReplyToEmail = process.env.BREVO_REPLY_TO_EMAIL || 'hello@wellforged.in';
 const brevoReplyToName = process.env.BREVO_REPLY_TO_NAME || brevoFromName;
-const storefrontUrl = process.env.STOREFRONT_URL || 'https://wellforged-ui.vercel.app/product';
+const storefrontUrl = process.env.STOREFRONT_URL || 'https://wellforged.in';
 const familyCouponCode = process.env.FAMILY_COUPON_CODE || 'FAMILY10';
 
-const isBrevoConfigured = Boolean(brevoApiKey && brevoFromEmail);
+const isBrevoConfigured = Boolean(brevoApiKey);
 
 const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-IN', {
@@ -34,17 +35,6 @@ const formatCurrency = (amount: number) =>
         currency: 'INR',
         maximumFractionDigits: 0,
     }).format(amount);
-
-const buildReplyTo = () => {
-    if (!brevoReplyToEmail) {
-        return undefined;
-    }
-
-    return {
-        email: brevoReplyToEmail,
-        name: brevoReplyToName,
-    };
-};
 
 const escapeHtml = (value: string) =>
     value
@@ -57,16 +47,27 @@ const escapeHtml = (value: string) =>
 const orderItemsToHtml = (items: OrderLineItem[]) =>
     items
         .map((item) => {
-            const variant = item.variantLabel ? ` - ${escapeHtml(item.variantLabel)}` : '';
-            return `<li style="margin-bottom:8px;">${escapeHtml(item.productName)}${variant} x ${item.quantity}</li>`;
+            const variant = item.variantLabel ? `<br/><span style="font-size:12px;color:#6d846f;">${escapeHtml(item.variantLabel)}</span>` : '';
+            return `
+            <tr>
+                <td style="padding:12px 0;border-bottom:1px solid #e9dfcf;">
+                    <span style="font-weight:600;color:#204635;">${escapeHtml(item.productName)}</span>${variant}
+                </td>
+                <td style="padding:12px 0;border-bottom:1px solid #e9dfcf;text-align:center;color:#3e6150;">
+                    ${item.quantity}
+                </td>
+                <td style="padding:12px 0;border-bottom:1px solid #e9dfcf;text-align:right;color:#204635;">
+                    ${formatCurrency(item.price * item.quantity)}
+                </td>
+            </tr>`;
         })
         .join('');
 
 const orderItemsToText = (items: OrderLineItem[]) =>
     items
         .map((item) => {
-            const variant = item.variantLabel ? ` - ${item.variantLabel}` : '';
-            return `- ${item.productName}${variant} x ${item.quantity}`;
+            const variant = item.variantLabel ? ` (${item.variantLabel})` : '';
+            return `- ${item.productName}${variant}: ${item.quantity} x ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`;
         })
         .join('\n');
 
@@ -75,79 +76,145 @@ const buildOrderConfirmationEmail = (
     orderNumber: string,
     totalAmount: number,
     items: OrderLineItem[],
+    estimatedDelivery?: string,
 ) => {
     const safeName = customerName.trim() || 'Customer';
     const amountPaid = formatCurrency(totalAmount);
     const itemsHtml = orderItemsToHtml(items);
     const itemsText = orderItemsToText(items);
-    const subject = `Welcome to the WellForged Family, ${safeName}! Order Confirmation`;
+    const deliveryText = estimatedDelivery || '3-5 business days';
+    const subject = 'Your order is confirmed – Wellforged';
 
     const htmlContent = `
-      <div style="background:#f7f3ea;padding:32px 16px;font-family:Georgia,serif;color:#254f3d;">
-        <div style="max-width:640px;margin:0 auto;background:#fffdf8;border:1px solid #e9dfcf;border-radius:24px;padding:32px;">
-          <p style="margin:0 0 16px;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;color:#6d846f;">Order Confirmed</p>
-          <h1 style="margin:0 0 20px;font-size:32px;line-height:1.15;color:#204635;">Welcome to the WellForged Family, ${escapeHtml(safeName)}.</h1>
-          <p style="margin:0 0 16px;font:16px/1.8 'Helvetica Neue',Arial,sans-serif;color:#3e6150;">
-            Most brands talk about quality; we verify it. By choosing us, you have not just bought a supplement - you have joined a movement for radical transparency.
-          </p>
-          <p style="margin:0 0 24px;font:16px/1.8 'Helvetica Neue',Arial,sans-serif;color:#3e6150;">
-            Our team is already preparing your parcel. We have double-checked the lab reports, and it is ready to make its way to you.
-          </p>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          @media screen and (max-width: 600px) {
+            .container { padding: 20px !important; }
+            .header h1 { font-size: 24px !important; }
+          }
+        </style>
+      </head>
+      <body style="margin:0;padding:0;background-color:#f7f3ea;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f7f3ea;">
+          <tr>
+            <td align="center" style="padding:40px 10px;">
+              <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:600px;background-color:#fffdf8;border:1px solid #e9dfcf;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+                <!-- Header -->
+                <tr>
+                  <td class="header" style="padding:40px 40px 20px;text-align:left;">
+                    <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#6d846f;font-weight:700;">Order Confirmed</p>
+                    <h1 style="margin:0;font-family:Georgia,serif;font-size:32px;line-height:1.2;color:#204635;font-weight:400;">Thank you for your order, ${escapeHtml(safeName)}.</h1>
+                  </td>
+                </tr>
+                
+                <!-- Intro -->
+                <tr>
+                  <td style="padding:0 40px 30px;">
+                    <p style="margin:0;font-size:16px;line-height:1.6;color:#3e6150;">
+                      We're getting your Wellforged order ready. You've joined a community that values radical transparency and uncompromising quality.
+                    </p>
+                  </td>
+                </tr>
 
-          <div style="border:1px solid #e9dfcf;border-radius:20px;padding:24px;background:#fff;">
-            <h2 style="margin:0 0 16px;font-size:22px;color:#204635;">Order Summary</h2>
-            <p style="margin:0 0 8px;font:15px/1.7 'Helvetica Neue',Arial,sans-serif;color:#3e6150;"><strong>Order ID:</strong> #${escapeHtml(orderNumber)}</p>
-            <ul style="margin:0 0 12px 18px;padding:0;font:15px/1.7 'Helvetica Neue',Arial,sans-serif;color:#3e6150;">
-              ${itemsHtml}
-            </ul>
-            <p style="margin:0;font:15px/1.7 'Helvetica Neue',Arial,sans-serif;color:#3e6150;"><strong>Amount Paid:</strong> ${escapeHtml(amountPaid)}</p>
-          </div>
+                <!-- Order Summary -->
+                <tr>
+                  <td style="padding:0 40px 30px;">
+                    <div style="background-color:#ffffff;border:1px solid #e9dfcf;border-radius:12px;padding:24px;">
+                      <h2 style="margin:0 0 16px;font-size:18px;color:#204635;border-bottom:1px solid #f0e6d6;padding-bottom:12px;">Order Summary <span style="font-weight:400;font-size:14px;color:#6d846f;float:right;">#${escapeHtml(orderNumber)}</span></h2>
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                        <thead>
+                          <tr>
+                            <th align="left" style="font-size:12px;text-transform:uppercase;color:#6d846f;padding-bottom:12px;">Item</th>
+                            <th align="center" style="font-size:12px;text-transform:uppercase;color:#6d846f;padding-bottom:12px;">Qty</th>
+                            <th align="right" style="font-size:12px;text-transform:uppercase;color:#6d846f;padding-bottom:12px;">Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${itemsHtml}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colspan="2" style="padding:20px 0 0;font-weight:700;color:#204635;font-size:16px;">Total Paid</td>
+                            <td align="right" style="padding:20px 0 0;font-weight:700;color:#204635;font-size:18px;">${escapeHtml(amountPaid)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
 
-          <div style="margin-top:24px;padding:24px;border-radius:20px;background:#f7f3ea;border:1px solid #e9dfcf;">
-            <h2 style="margin:0 0 12px;font-size:20px;color:#204635;">What's Next?</h2>
-            <p style="margin:0 0 14px;font:15px/1.8 'Helvetica Neue',Arial,sans-serif;color:#3e6150;">
-              Once your order is dispatched, you will receive a tracking link. Inside your package, you will find a QR code that reveals the exact third-party lab report for the batch in your hand.
-            </p>
-            <p style="margin:0;font:15px/1.8 'Helvetica Neue',Arial,sans-serif;color:#3e6150;">
-              Use <strong>${escapeHtml(familyCouponCode)}</strong> for 10% off when you are ready to restock.
-            </p>
-          </div>
+                <!-- Details -->
+                <tr>
+                  <td style="padding:0 40px 40px;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td width="50%" style="vertical-align:top;padding-right:10px;">
+                          <h3 style="margin:0 0 8px;font-size:14px;text-transform:uppercase;color:#6d846f;letter-spacing:0.1em;">Estimated Delivery</h3>
+                          <p style="margin:0;font-size:15px;color:#204635;line-height:1.4;">${escapeHtml(deliveryText)}</p>
+                        </td>
+                        <td width="50%" style="vertical-align:top;">
+                          <h3 style="margin:0 0 8px;font-size:14px;text-transform:uppercase;color:#6d846f;letter-spacing:0.1em;">Next Steps</h3>
+                          <p style="margin:0;font-size:15px;color:#204635;line-height:1.4;">You'll receive a tracking link once your parcel is dispatched.</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-          <div style="margin-top:28px;">
-            <a href="${escapeHtml(storefrontUrl)}" style="display:inline-block;background:#214f3d;color:#fff;text-decoration:none;padding:14px 22px;border-radius:999px;font:700 13px/1.2 'Helvetica Neue',Arial,sans-serif;letter-spacing:0.16em;text-transform:uppercase;">
-              Shop More at WellForged
-            </a>
-          </div>
+                <!-- Promo -->
+                <tr>
+                  <td style="padding:0 40px 40px;">
+                    <div style="background-color:#f7f3ea;border-radius:12px;padding:24px;text-align:center;">
+                      <p style="margin:0 0 12px;font-size:14px;color:#3e6150;">Share the wellness? Use this code for your next restock:</p>
+                      <div style="display:inline-block;padding:8px 20px;border:2px dashed #6d846f;border-radius:8px;font-weight:700;color:#204635;font-size:18px;letter-spacing:2px;">${escapeHtml(familyCouponCode)}</div>
+                      <p style="margin:12px 0 0;font-size:12px;color:#6d846f;">10% OFF for the Wellforged Family</p>
+                    </div>
+                  </td>
+                </tr>
 
-          <p style="margin:28px 0 0;font:15px/1.8 'Helvetica Neue',Arial,sans-serif;color:#3e6150;">
-            Stay Bold. Stay Well.<br />
-            <strong>Ayush Amoli</strong><br />
-            Founder, WellForged<br />
-            The No-Nonsense Supplement Brand
-          </p>
-        </div>
-      </div>
+                <!-- Footer -->
+                <tr>
+                  <td style="padding:40px;background-color:#204635;color:#ffffff;text-align:center;">
+                    <p style="margin:0 0 16px;font-family:Georgia,serif;font-size:20px;">Wellforged</p>
+                    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#a8c4b2;">
+                      Uncompromising supplements for the dedicated.<br/>
+                      Questions? Reply to this email or contact <a href="mailto:hello@wellforged.in" style="color:#ffffff;text-decoration:underline;">hello@wellforged.in</a>
+                    </p>
+                    <a href="${storefrontUrl}" style="display:inline-block;background-color:#fffdf8;color:#204635;padding:14px 28px;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;">Visit Store</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:24px 0 0;font-size:12px;color:#6d846f;text-align:center;">&copy; 2026 Wellforged. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
     const textContent = [
-        `Welcome to the WellForged Family, ${safeName}.`,
+        `Thank you for your order, ${safeName}!`,
         '',
-        'Most brands talk about quality; we verify it. By choosing us, you have joined a movement for radical transparency.',
-        'Your order is confirmed and our team is already preparing your parcel.',
-        '',
-        `Order ID: #${orderNumber}`,
+        `Order Number: #${orderNumber}`,
+        '---------------------------------------',
         itemsText,
-        `Amount Paid: ${amountPaid}`,
+        '---------------------------------------',
+        `Total Amount Paid: ${amountPaid}`,
         '',
-        "What's Next?",
-        'Once your order is dispatched, you will receive a tracking link. Inside your package, you will find a QR code to view the exact third-party lab report for your batch.',
-        `Use ${familyCouponCode} for 10% off on your next purchase.`,
+        `Estimated Delivery: ${deliveryText}`,
         '',
-        `Shop More: ${storefrontUrl}`,
+        `Next Steps: You'll receive a tracking link once your parcel is dispatched.`,
+        '',
+        `Exclusive Offer: Use ${familyCouponCode} for 10% OFF on your next restock.`,
         '',
         'Stay Bold. Stay Well.',
-        'Ayush Amoli',
-        'Founder, WellForged',
+        'Wellforged Team',
+        '',
+        `Visit Store: ${storefrontUrl}`,
+        `Support: hello@wellforged.in`,
     ].join('\n');
 
     return { subject, htmlContent, textContent };
@@ -161,21 +228,23 @@ const buildOrderStatusEmail = (
     const safeName = customerName.trim() || 'Customer';
     const normalizedStatus = status.replace(/_/g, ' ');
     const titleStatus = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
-    const subject = `WellForged Order Update: ${titleStatus} - #${orderNumber}`;
+    const subject = `Wellforged Order Update: ${titleStatus} - #${orderNumber}`;
 
     const htmlContent = `
-      <div style="background:#f7f3ea;padding:32px 16px;font-family:Georgia,serif;color:#254f3d;">
-        <div style="max-width:640px;margin:0 auto;background:#fffdf8;border:1px solid #e9dfcf;border-radius:24px;padding:32px;">
-          <p style="margin:0 0 16px;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;color:#6d846f;">Order Update</p>
-          <h1 style="margin:0 0 20px;font-size:30px;line-height:1.15;color:#204635;">Hi ${escapeHtml(safeName)}, your order is now ${escapeHtml(titleStatus)}.</h1>
-          <p style="margin:0 0 14px;font:16px/1.8 'Helvetica Neue',Arial,sans-serif;color:#3e6150;">
-            Order <strong>#${escapeHtml(orderNumber)}</strong> has moved to the next stage. We will keep you updated as it progresses.
+      <div style="background-color:#f7f3ea;padding:40px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#254f3d;">
+        <div style="max-width:600px;margin:0 auto;background-color:#fffdf8;border:1px solid #e9dfcf;border-radius:16px;padding:40px;box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+          <p style="margin:0 0 16px;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#6d846f;font-weight:700;">Order Update</p>
+          <h1 style="margin:0 0 24px;font-family:Georgia,serif;font-size:28px;line-height:1.2;color:#204635;font-weight:400;">Hi ${escapeHtml(safeName)}, your order is now ${escapeHtml(titleStatus)}.</h1>
+          <p style="margin:0 0 30px;font-size:16px;line-height:1.6;color:#3e6150;">
+            Order <strong>#${escapeHtml(orderNumber)}</strong> has moved to the next stage. We'll keep you updated as it makes its way to you.
           </p>
-          <div style="margin-top:24px;">
-            <a href="${escapeHtml(storefrontUrl)}" style="display:inline-block;background:#214f3d;color:#fff;text-decoration:none;padding:14px 22px;border-radius:999px;font:700 13px/1.2 'Helvetica Neue',Arial,sans-serif;letter-spacing:0.16em;text-transform:uppercase;">
-              Visit WellForged
+          <div style="margin-top:30px;">
+            <a href="${escapeHtml(storefrontUrl)}" style="display:inline-block;background-color:#204635;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">
+              Visit Wellforged
             </a>
           </div>
+          <hr style="margin:40px 0 20px;border:0;border-top:1px solid #e9dfcf;" />
+          <p style="font-size:14px;color:#6d846f;">Questions? <a href="mailto:hello@wellforged.in" style="color:#204635;">Contact Support</a></p>
         </div>
       </div>
     `;
@@ -184,22 +253,44 @@ const buildOrderStatusEmail = (
         `Hi ${safeName},`,
         '',
         `Your order #${orderNumber} is now ${titleStatus}.`,
-        'We will keep you updated as it progresses.',
+        'We\'ll keep you updated as it progresses.',
         '',
-        `Visit WellForged: ${storefrontUrl}`,
+        `Visit Wellforged: ${storefrontUrl}`,
+        `Support: hello@wellforged.in`,
     ].join('\n');
 
     return { subject, htmlContent, textContent };
 };
 
-export class MailerService {
+class MailerService {
     static isConfigured(): boolean {
         return isBrevoConfigured;
     }
 
+    private static async withRetry<T>(
+        operation: () => Promise<T>,
+        retries: number = 3,
+        delay: number = 1000
+    ): Promise<T> {
+        try {
+            return await operation();
+        } catch (error: any) {
+            if (retries <= 0) throw error;
+            
+            // Don't retry on client errors (4xx) unless it's 429 (Too Many Requests)
+            if (error.status && error.status >= 400 && error.status < 500 && error.status !== 429) {
+                throw error;
+            }
+
+            logger.warn(`Email retry attempt remaining: ${retries}. Error: ${error.message}`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return this.withRetry(operation, retries - 1, delay * 2);
+        }
+    }
+
     static async sendEmail(payload: EmailPayload): Promise<void> {
         if (!isBrevoConfigured) {
-            logger.warn('Brevo email skipped: missing configuration', {
+            logger.warn('Brevo email skipped: missing BREVO_API_KEY', {
                 to: payload.to.email,
                 subject: payload.subject,
             });
@@ -217,46 +308,73 @@ export class MailerService {
                     ...(payload.to.name ? { name: payload.to.name } : {}),
                 },
             ],
+            replyTo: {
+                email: brevoReplyToEmail,
+                name: brevoReplyToName,
+            },
             subject: payload.subject,
             htmlContent: payload.htmlContent,
             textContent: payload.textContent,
         };
 
-        const replyTo = buildReplyTo();
-        if (replyTo) {
-            body.replyTo = replyTo;
+        const executeRequest = async () => {
+            const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'api-key': brevoApiKey as string,
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                const error: any = new Error(`Brevo API error: ${response.status} ${errorBody}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            return response.json();
+        };
+
+        try {
+            await this.withRetry(() => executeRequest());
+            logger.info('Brevo email sent successfully', {
+                to: payload.to.email,
+                subject: payload.subject,
+            });
+        } catch (error: any) {
+            logger.error('Failed to send Brevo email after retries', {
+                to: payload.to.email,
+                subject: payload.subject,
+                error: error.message,
+            });
+            throw error;
         }
-
-        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-            method: 'POST',
-            headers: {
-                'accept': 'application/json',
-                'api-key': brevoApiKey as string,
-                'content-type': 'application/json',
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            const errorBody = await response.text();
-            throw new Error(`Brevo email failed: ${response.status} ${errorBody}`);
-        }
-
-        logger.info('Brevo email sent successfully', {
-            to: payload.to.email,
-            subject: payload.subject,
-        });
     }
 
-    static async sendOrderConfirmation(email: string, customerName: string, orderNumber: string, totalAmount: number, items: OrderLineItem[]): Promise<void> {
-        const template = buildOrderConfirmationEmail(customerName, orderNumber, totalAmount, items);
+    static async sendOrderConfirmation(
+        email: string, 
+        customerName: string, 
+        orderNumber: string, 
+        totalAmount: number, 
+        items: OrderLineItem[],
+        estimatedDelivery?: string
+    ): Promise<void> {
+        const template = buildOrderConfirmationEmail(customerName, orderNumber, totalAmount, items, estimatedDelivery);
         await this.sendEmail({
             to: { email, name: customerName },
             ...template,
         });
     }
 
-    static async sendShippingUpdate(email: string, customerName: string, orderNumber: string, status: string): Promise<void> {
+    static async sendShippingUpdate(
+        email: string, 
+        customerName: string, 
+        orderNumber: string, 
+        status: string
+    ): Promise<void> {
         const template = buildOrderStatusEmail(customerName, orderNumber, status);
         await this.sendEmail({
             to: { email, name: customerName },

@@ -8,7 +8,6 @@ import morgan from "morgan";
 import pool from "./config/db.js";
 import logger from "./utils/logger.js";
 
-import authRoutes from "./routes/auth.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import orderRoutes from "./routes/order.routes.js";
@@ -34,15 +33,6 @@ const limiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
 });
-
-const authLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 10,
-    message: "Too many authentication attempts, please try again after an hour",
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
 
 // ---------------- MIDDLEWARE ----------------
 
@@ -92,7 +82,6 @@ app.use(
 
 // ---------------- ROUTES ----------------
 
-app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/inventory", inventoryRoutes);

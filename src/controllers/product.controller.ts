@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import pool from '../config/db.js';
+import { normalizePublicUrl } from '../utils/publicUrls.js';
 
 export const getProducts = async (req: Request, res: Response) => {
     try {
@@ -59,14 +60,20 @@ export const getProductBySlug = async (req: Request, res: Response) => {
             'SELECT id, image_url, is_main as is_primary, display_order as sort_order FROM product_images WHERE product_id = $1 ORDER BY display_order ASC',
             [product.id]
         );
-        product.images = images.rows;
+        product.images = images.rows.map((row: any) => ({
+            ...row,
+            image_url: normalizePublicUrl(row.image_url),
+        }));
 
         // Fetch metadata (specs, highlights)
         const metadata = await pool.query(
             'SELECT category, key, value, icon_name, display_order FROM product_metadata WHERE product_id = $1 ORDER BY display_order ASC',
             [product.id]
         );
-        product.metadata = metadata.rows;
+        product.metadata = metadata.rows.map((row: any) => ({
+            ...row,
+            icon_name: normalizePublicUrl(row.icon_name),
+        }));
 
         // Fetch FAQs
         const faqs = await pool.query(

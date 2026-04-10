@@ -216,10 +216,12 @@ export const createOrder = async (req: any, res: Response) => {
                     order.order_number,
                     Number(total_amount),
                     itemsToProcess.map((item: any) => ({
-                        productName: item.product_name || 'WellForged Product',
+                        productName: item.product_name || 'Wellforged Product',
                         quantity: Number(item.quantity),
+                        price: Number(item.price),
                         variantLabel: item.label || null,
-                    }))
+                    })),
+                    '3-5 business days'
                 );
             } catch (emailError) {
                 console.error('Order email send failed:', emailError);
@@ -252,48 +254,6 @@ export const getAllOrdersForAdmin = async (req: any, res: Response) => {
              ORDER BY o.created_at DESC`
         );
         res.json(result.rows);
-    } catch (error: any) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-export const getOrders = async (req: any, res: Response) => {
-    try {
-        const result = await pool.query(
-            'SELECT * FROM orders WHERE profile_id = $1 ORDER BY created_at DESC',
-            [req.user.id]
-        );
-        res.json(result.rows);
-    } catch (error: any) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-export const getOrderDetails = async (req: any, res: Response) => {
-    try {
-        const { id } = req.params;
-        const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1 AND profile_id = $2', [id, req.user.id]);
-
-        if (orderResult.rows.length === 0) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        const order = orderResult.rows[0];
-        const itemsResult = await pool.query(
-            `SELECT oi.*, p.name, p.slug, s.label 
-             FROM order_items oi 
-             JOIN skus s ON oi.sku_id = s.id 
-             JOIN products p ON s.product_id = p.id 
-             WHERE oi.order_id = $1`,
-            [order.id]
-        );
-
-        order.items = itemsResult.rows;
-
-        const paymentResult = await pool.query('SELECT * FROM payments WHERE order_id = $1', [order.id]);
-        order.payment = paymentResult.rows[0] || null;
-
-        res.json(order);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }

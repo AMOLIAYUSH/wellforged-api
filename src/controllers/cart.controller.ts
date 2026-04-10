@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import pool from '../config/db.js';
+import { normalizePublicUrl } from '../utils/publicUrls.js';
 
 export const getCart = async (req: any, res: Response) => {
     try {
@@ -15,7 +16,10 @@ export const getCart = async (req: any, res: Response) => {
         );
 
         res.json({
-            items: itemsResult.rows
+            items: itemsResult.rows.map((row: any) => ({
+                ...row,
+                image_url: normalizePublicUrl(row.image_url),
+            }))
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
