@@ -1,4 +1,6 @@
 import logger from '../utils/logger.js';
+// Force sync to ensure MailerService is live
+
 
 interface EmailRecipient {
     email: string;
